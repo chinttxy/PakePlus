@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zhejiang Huapu Instrument Digital Oscilloscope</title>
+    <style>
+        :root {
+            --bg: #1a1a1a; --panel-bg: #252525; --text: #ccc; --text-bright: #eee;
+            --accent: #4a9eff; --border: #3a3a3a;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg); color: var(--text);
+            font-family: 'Segoe UI', system-ui, sans-serif; height: 100vh;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        .header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 20px; background: var(--panel-bg);
+            border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 15px; flex-wrap: wrap;
+        }
+        .header-left { display: flex; align-items: center; gap: 15px; }
+        .header-right { display: flex; align-items: center; gap: 10px; }
+        .title { font-size: 18px; font-weight: 600; color: var(--text-bright); }
+        .status-badge {
+            font-size: 13px; padding: 4px 12px; border-radius: 12px;
+            background: #3a3a3a; color: #aaa; transition: 0.2s;
+        }
+        .status-badge.connected { background: #1e5c2e; color: #8fdf8f; }
+        .status-badge.error { background: #5c1e1e; color: #df8f8f; }
+        .status-badge.running { background: #1a3a5a; color: #8fc0ff; }
+        .status-badge.idle { background: #3a3a00; color: #dfd8a0; }
+        .status-badge.paused { background: #5a5a1a; color: #ffff88; }
+
+        button {
+            background: #3a3a3a; border: 1px solid #555; color: #ccc;
+            padding: 8px 16px; border-radius: 6px; cursor: pointer;
+            font-size: 13px; transition: all 0.15s;
+        }
+        button:hover { background: #4a4a4a; border-color: #777; }
+        button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        button.primary:hover { background: #5ab0ff; }
+        button:disabled { opacity: 0.4; pointer-events: none; }
+        select {
+            background: #3a3a3a; border: 1px solid #555; color: #ccc;
+            padding: 8px 12px; border-radius: 6px; font-size: 13px; cursor: pointer;
+        }
+
+        .main { display: flex; flex: 1; overflow: hidden; }
+        .wave-container {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            padding: 10px; background: #0d0d0d; position: relative;
+        }
+        canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+        #tooltip {
+            position: absolute; background: rgba(0,0,0,0.85); color: #fff;
+            padding: 6px 12px; border-radius: 4px; font-size: 13px;
+            pointer-events: none; display: none; white-space: nowrap;
+            z-index: 10; border: 1px solid #555; line-height: 1.5;
+        }
+
+        .panel {
+            width: 260px; background: var(--panel-bg);
+            border-left: 1px solid var(--border); padding: 20px 15px;
+            display: flex; flex-direction: column; gap: 25px; overflow-y: auto; flex-shrink: 0;
+        }
+        .panel h3 {
+            font-size: 14px; text-transform: uppercase; letter-spacing: 1px;
+            color: #888; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 6px;
+        }
+        .control-group { display: flex; flex-direction: column; gap: 8px; }
+        .control-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+        .control-row label { color: #aaa; }
+        .control-row span { color: var(--text-bright); font-weight: 600; min-width: 45px; text-align: right; }
+        input[type=range] { width: 100%; cursor: pointer; background: #333; height: 4px; border-radius: 2px; -webkit-appearance: none; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer;
+        }
+        input[type=range]:disabled { opacity: 0.7; background-color: #555; cursor: not-allowed; }
+        .ch-toggle { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
+        .ch-toggle input { display: none; }
+        .ch-toggle label {
+            padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;
+            background: #2a2a2a; border: 1px solid #444; color: #777; transition: 0.2s;
+        }
+        .ch-toggle input:checked + label { background: #1a3a5a; border-color: var(--accent); color: #fff; }
+        .switch-row {
+            display: flex; align-items: center; justify-content: space-between; font-size: 13px; margin-top: 5px;
+        }
+        .switch-row input { width: 18px; height: 18px; cursor: pointer; }
+
+        @media (max-width: 900px) {
+            .main { flex-direction: column; }
+            .panel { width: 100%; border-left: none; border-top: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; gap: 15px; padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div class="header-left">
+        <span class="title" id="titleText">Zhejiang Huapu Instrument Digital Oscilloscope</span>
+        <span class="status-badge" id="statusBadge">Disconnected</span>
+    </div>
+    <div class="header-right">
+        <select id="protocolSel">
+            <option value="7" selected>Proto 7: 3-Phase Voltage</option>
+            <option value="8">Proto 8: 3-Phase Current</option>
+            <option value="9">Proto 9: UA+IA</option>
+            <option value="10">Proto 10: UB+IB</option>
+            <option value="11">Proto 11: UC+IC</option>
+        </select>
+        <button id="btnConnect">🔌 Connect</button>
+        <button id="btnDisconnect" disabled>🔌 Disconnect</button>
+        <button id="btnStart" class="primary" disabled>▶ Start</button>
+        <button id="btnStop" disabled>⏹ Stop</button>
+    </div>
+</div>
+
+<div class="main">
+    <div class="wave-container" id="waveContainer">
+        <canvas id="waveCanvas"></canvas>
+        <div id="tooltip"></div>
+    </div>
+    <div class="panel">
+        <div>
+            <h3 id="langLabel">🌐 Language</h3>
+            <select id="langSel">
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+                <option value="ru">Русский</option>
+                <option value="ar">العربية</option>
+                <option value="es">Español</option>
+            </select>
+        </div>
+        <div>
+            <h3 id="horizLabel">⏱ Horizontal</h3>
+            <div class="control-group">
+                <div class="control-row">
+                    <label id="wavesLabel">Cycles</label>
+                    <span id="horizValue">2</span>
+                </div>
+                <input type="range" id="horizScale" min="1" max="20" value="2" step="1">
+            </div>
+        </div>
+        <div>
+            <h3 id="vertLabel">🔽 Vertical</h3>
+            <div class="control-group">
+                <div class="control-row">
+                    <label id="gainLabel">Gain</label>
+                    <span id="vertValue">4.0x</span>
+                </div>
+                <input type="range" id="vertScale" min="0.5" max="20" value="4" step="0.5">
+            </div>
+            <div class="control-group" style="margin-top: 15px;">
+                <div class="control-row">
+                    <label id="fftYLabel">FFT Y Range</label>
+                    <span id="fftYValue">100%</span>
+                </div>
+                <input type="range" id="fftYSlider" min="5" max="120" value="100" step="5">
+            </div>
+            <div style="margin-top: 15px;">
+                <button id="btnAutoFit" style="width:100%;" disabled>🔍 Auto Fit</button>
+            </div>
+        </div>
+        <div>
+            <h3 id="chLabel">📈 Channels</h3>
+            <div class="ch-toggle" id="chToggles"></div>
+        </div>
+        <div>
+            <h3 id="displayLabel">📊 Display</h3>
+            <div class="switch-row">
+                <label id="gridLabel">Grid</label>
+                <input type="checkbox" id="gridSwitch" checked>
+            </div>
+            <div class="control-row" style="margin-top: 10px;">
+                <label id="modeLabel">Mode</label>
+                <select id="modeSel">
+                    <option value="time">Time Domain</option>
+                    <option value="fft">Frequency Domain</option>
+                    <option value="rms">RMS</option>
+                </select>
+            </div>
+        </div>
+        <div style="margin-top: auto; font-size: 12px; color: #666;" id="infoText">
+            Sample Rate: 64 pts/cycle<br>
+            Sliding window display
+        </div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        const LANG = {
+            en: {
+                title: 'Zhejiang Huapu Instrument Digital Oscilloscope',
+                status: { disconnected: 'Disconnected', connected: 'Connected (idle)', running: 'Receiving…', stopped: 'Stopped', syncing: 'Synchronizing…', idle: 'Idle (draining)', error: 'Error', paused: 'PAUSED (Press Space)' },
+                protocolOptions: { 7:'Proto 7: 3-Phase Voltage', 8:'Proto 8: 3-Phase Current', 9:'Proto 9: UA+IA', 10:'Proto 10: UB+IB', 11:'Proto 11: UC+IC' },
+                buttons: { connect: '🔌 Connect', disconnect: '🔌 Disconnect', start: '▶ Start', stop: '⏹ Stop', autoFit: '🔍 Auto Fit' },
+                panel: { language: '🌐 Language', horiz: '⏱ Horizontal', waves: 'Cycles', vert: '🔽 Vertical', gain: 'Gain', channel: '📈 Channels', display: 'Display', grid: 'Grid', fftYRange: 'FFT Y Range', mode: 'Mode', timeMode: 'Time Domain', fftMode: 'Frequency Domain', rmsMode: 'RMS' },
+                info: 'Sample Rate: 64 pts/cycle<br>Sliding window display',
+                fft: { thd: 'THD', harmonic: 'Harmonic', percent: '%', needData: 'Need 32 cycles (2048 pts)', progress: 'Collected {0}/2048' },
+                rms: { needData: 'Collecting RMS data...', value: 'RMS', seconds: 's' },
+                timeDomainTooltip: 'Point: {point} | Value: {value}'
+            },
+            zh: {
+                title: '浙江华普仪表有限公司数字示波器',
+                status: { disconnected: '未连接', connected: '已连接（空闲）', running: '接收中…', stopped: '已停止', syncing: '正在同步…', idle: '空闲排空中', error: '错误', paused: '已暂停（按空格继续）' },
+                protocolOptions: { 7:'协议7: 三相电压', 8:'协议8: 三相电流', 9:'协议9: UA+IA', 10:'协议10: UB+IB', 11:'协议11: UC+IC' },
+                buttons: { connect: '🔌 连接串口', disconnect: '🔌 断开串口', start: '▶ 开始', stop: '⏹ 停止', autoFit: '🔍 适应屏幕' },
+                panel: { language: '🌐 语言', horiz: '⏱ 水平缩放', waves: '周波数', vert: '🔽 垂直增益', gain: '幅度', channel: '📈 通道可见', display: '显示', grid: '网格线', fftYRange: 'FFT Y轴范围', mode: '显示模式', timeMode: '时域图', fftMode: '频域图', rmsMode: '有效值图' },
+                info: '采样率: 64点/周波<br>滑动窗口实时显示',
+                fft: { thd: '总谐波畸变率', harmonic: '谐波', percent: '%', needData: '需要32个周波(2048点)', progress: '已采集 {0}/2048' },
+                rms: { needData: '正在采集RMS数据...', value: '有效值', seconds: '秒' },
+                timeDomainTooltip: '采样点: {point} | 数值: {value}'
+            },
+            ru: {
+                title: 'Цифровой осциллограф Zhejiang Huapu', status: { disconnected: 'Не подключен', connected: 'Подключен (ожидание)', running: 'Прием…', stopped: 'Остановлен', syncing: 'Синхронизация…', idle: 'Ожидание (слив)', error: 'Ошибка', paused: 'ПАУЗА (пробел)' },
+                protocolOptions: { 7:'Прот 7: 3-ф напряжение', 8:'Прот 8: 3-ф ток', 9:'Прот 9: UA+IA', 10:'Прот 10: UB+IB', 11:'Прот 11: UC+IC' },
+                buttons: { connect: '🔌 Подключить', disconnect: '🔌 Отключить', start: '▶ Старт', stop: '⏹ Стоп', autoFit: '🔍 Автоподбор' },
+                panel: { language: '🌐 Язык', horiz: '⏱ Горизонт', waves: 'Периодов', vert: '🔽 Вертикаль', gain: 'Усиление', channel: '📈 Каналы', display: 'Экран', grid: 'Сетка', fftYRange: 'Диапазон Y', mode: 'Режим', timeMode: 'Временной', fftMode: 'Спектр', rmsMode: 'RMS' },
+                info: 'Частота: 64 точ/период<br>Скользящее окно',
+                fft: { thd: 'THD', harmonic: 'Гармоника', percent: '%', needData: 'Нужно 32 периода (2048 отсчетов)', progress: 'Собрано {0}/2048' },
+                rms: { needData: 'Сбор RMS данных...', value: 'RMS', seconds: 'с' },
+                timeDomainTooltip: 'Точка: {point} | Значение: {value}'
+            },
+            ar: {
+                title: 'جهاز قياس الذبذبات الرقمي Zhejiang Huapu', status: { disconnected: 'غير متصل', connected: 'متصل (خامل)', running: 'يستقبل…', stopped: 'متوقف', syncing: 'جاري المزامنة…', idle: 'خامل (تفريغ)', error: 'خطأ', paused: 'متوقف مؤقتًا (مسافة)' },
+                protocolOptions: { 7:'بروتوكول 7: جهد ثلاثي', 8:'بروتوكول 8: تيار ثلاثي', 9:'بروتوكول 9: UA+IA', 10:'بروتوكول 10: UB+IB', 11:'بروتوكول 11: UC+IC' },
+                buttons: { connect: '🔌 اتصال', disconnect: '🔌 قطع', start: '▶ بدء', stop: '⏹ إيقاف', autoFit: '🔍 توافق تلقائي' },
+                panel: { language: '🌐 اللغة', horiz: '⏱ أفقي', waves: 'دورات', vert: '🔽 رأسي', gain: 'الكسب', channel: '📈 القنوات', display: 'عرض', grid: 'شبكة', fftYRange: 'نطاق Y', mode: 'الوضع', timeMode: 'المجال الزمني', fftMode: 'مجال التردد', rmsMode: 'RMS' },
+                info: 'معدل العينة: 64 نقطة/دورة<br>نافذة منزلقة',
+                fft: { thd: 'THD', harmonic: 'التوافقي', percent: '%', needData: 'تحتاج 32 دورة (2048 نقطة)', progress: 'تم جمع {0}/2048' },
+                rms: { needData: 'جمع بيانات RMS...', value: 'RMS', seconds: 'ث' },
+                timeDomainTooltip: 'نقطة: {point} | القيمة: {value}'
+            },
+            es: {
+                title: 'Osciloscopio digital Zhejiang Huapu', status: { disconnected: 'Desconectado', connected: 'Conectado (inactivo)', running: 'Recibiendo…', stopped: 'Detenido', syncing: 'Sincronizando…', idle: 'Inactivo (drenando)', error: 'Error', paused: 'PAUSADO (Espacio)' },
+                protocolOptions: { 7:'Proto 7: Tensión trifásica', 8:'Proto 8: Corriente trifásica', 9:'Proto 9: UA+IA', 10:'Proto 10: UB+IB', 11:'Proto 11: UC+IC' },
+                buttons: { connect: '🔌 Conectar', disconnect: '🔌 Desconectar', start: '▶ Iniciar', stop: '⏹ Detener', autoFit: '🔍 Autoajuste' },
+                panel: { language: '🌐 Idioma', horiz: '⏱ Horizontal', waves: 'Ciclos', vert: '🔽 Vertical', gain: 'Ganancia', channel: '📈 Canales', display: 'Pantalla', grid: 'Cuadrícula', fftYRange: 'Rango Y FFT', mode: 'Modo', timeMode: 'Dominio temporal', fftMode: 'Dominio frecuencial', rmsMode: 'RMS' },
+                info: 'Frecuencia muestreo: 64 pts/ciclo<br>Ventana deslizante',
+                fft: { thd: 'THD', harmonic: 'Armónico', percent: '%', needData: 'Necesita 32 ciclos (2048 pts)', progress: 'Recolectados {0}/2048' },
+                rms: { needData: 'Recolectando datos RMS...', value: 'Valor RMS', seconds: 's' },
+                timeDomainTooltip: 'Punto: {point} | Valor: {value}'
+            }
+        };
+
+        let currentLang = 'en';
+        function t(path, params) {
+            const keys = path.split('.');
+            let val = LANG[currentLang];
+            for (let k of keys) val = val[k];
+            if (typeof val === 'string' && params) {
+                return val.replace(/\{(\d+)\}/g, (_, idx) => params[idx] || '');
+            }
+            return val || path;
+        }
+
+        function updateUILanguage() {
+            document.getElementById('titleText').textContent = t('title');
+            const protocolSel = document.getElementById('protocolSel');
+            for (let i = 0; i < protocolSel.options.length; i++) {
+                const v = protocolSel.options[i].value;
+                protocolSel.options[i].text = t(`protocolOptions.${v}`);
+            }
+            document.getElementById('btnConnect').textContent = t('buttons.connect');
+            document.getElementById('btnDisconnect').textContent = t('buttons.disconnect');
+            document.getElementById('btnStart').textContent = t('buttons.start');
+            document.getElementById('btnStop').textContent = t('buttons.stop');
+            document.getElementById('btnAutoFit').textContent = t('buttons.autoFit');
+            document.getElementById('langLabel').textContent = t('panel.language');
+            document.getElementById('horizLabel').textContent = t('panel.horiz');
+            document.getElementById('wavesLabel').textContent = t('panel.waves');
+            document.getElementById('vertLabel').textContent = t('panel.vert');
+            document.getElementById('gainLabel').textContent = t('panel.gain');
+            document.getElementById('fftYLabel').textContent = t('panel.fftYRange');
+            document.getElementById('chLabel').textContent = t('panel.channel');
+            document.getElementById('displayLabel').innerHTML = '📊 ' + t('panel.display');
+            document.getElementById('gridLabel').textContent = t('panel.grid');
+            document.getElementById('modeLabel').textContent = t('panel.mode');
+            const modeSel = document.getElementById('modeSel');
+            modeSel.options[0].text = t('panel.timeMode');
+            modeSel.options[1].text = t('panel.fftMode');
+            modeSel.options[2].text = t('panel.rmsMode');
+            document.getElementById('infoText').innerHTML = t('info');
+            setStatus(currentStatusKey, currentStatusType);
+        }
+
+        const PROTOCOLS = {
+            7:  { name: 'UA UB UC', frameLen: 388, channels: 3, idBytes: [0x68,0x03] },
+            8:  { name: 'IA IB IC', frameLen: 388, channels: 3, idBytes: [0x69,0x03] },
+            9:  { name: 'UA+IA',    frameLen: 260, channels: 2, idBytes: [0xAA,0x01] },
+            10: { name: 'UB+IB',    frameLen: 260, channels: 2, idBytes: [0xBB,0x01] },
+            11: { name: 'UC+IC',    frameLen: 260, channels: 2, idBytes: [0xCC,0x01] },
+        };
+
+        const CHANNEL_COLORS = { 'UA': '#FFD700', 'IA': '#FFD700', 'UB': '#32CD32', 'IB': '#32CD32', 'UC': '#FF4444', 'IC': '#FF4444' };
+        const FALLBACK_COLORS = ['#FFD700', '#32CD32', '#FF4444'];
+        function getChannelColor(idx, names) {
+            if (names && names[idx] && CHANNEL_COLORS[names[idx]]) return CHANNEL_COLORS[names[idx]];
+            return FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
+        }
+
+        const VOLTAGE_COEFF = 220.0 * Math.sqrt(2) / 7600;
+        const CURRENT_COEFF = 5.00 * Math.sqrt(2) / 5280;
+
+        function getChannelUnitAndPrecision(channelName) {
+            if (channelName.startsWith('U')) return { coeff: VOLTAGE_COEFF, unit: 'V', precision: 1 };
+            if (channelName.startsWith('I')) return { coeff: CURRENT_COEFF, unit: 'A', precision: 2 };
+            return { coeff: 1, unit: '', precision: 0 };
+        }
+
+        // 全局状态
+        let port = null, activeMode = 'idle', abortController = null, reader = null;
+        let currentProtocol = 7;
+        let rxBuffer = [];
+        const MAX_BUFFER_SIZE = 100 * 1024;
+        const MAX_WINDOW = 2048;
+        let waveWindows = [], validDataLength = 0;
+        let horizWaves = 2, vertGain = 4.0, channelVisible = [], showGrid = true;
+        let displayMode = 'time', fftYMax = 100;
+        let fftCache = null, needsFFTUpdate = false, fftBarPositions = [];
+
+        const MAX_RMS_POINTS = 5000;
+        let rmsWindows = [], rmsDataLength = 0;
+        let baseFreq = 50;
+        let rmsVerticalOffset = 0;
+
+        let hoverPointIndex = -1, hoverCanvasX = 0;
+        let lastMouseX = 0, lastMouseY = 0, mouseInsideCanvas = false;
+
+        let paused = false;
+        let pauseFlashCount = 0;
+
+        let isDragging = false;
+        let dragStartY = 0;
+        let dragStartOffset = 0;
+
+        let currentStatusKey = 'status.disconnected', currentStatusType = '';
+
+        const canvas = document.getElementById('waveCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusBadge = document.getElementById('statusBadge');
+        const btnConnect = document.getElementById('btnConnect');
+        const btnDisconnect = document.getElementById('btnDisconnect');
+        const btnStart = document.getElementById('btnStart');
+        const btnStop = document.getElementById('btnStop');
+        const btnAutoFit = document.getElementById('btnAutoFit');
+        const protocolSel = document.getElementById('protocolSel');
+        const horizSlider = document.getElementById('horizScale');
+        const horizValueSpan = document.getElementById('horizValue');
+        const vertSlider = document.getElementById('vertScale');
+        const vertValueSpan = document.getElementById('vertValue');
+        const chTogglesDiv = document.getElementById('chToggles');
+        const gridSwitch = document.getElementById('gridSwitch');
+        const modeSel = document.getElementById('modeSel');
+        const fftYSlider = document.getElementById('fftYSlider');
+        const fftYValueSpan = document.getElementById('fftYValue');
+        const langSel = document.getElementById('langSel');
+        const tooltip = document.getElementById('tooltip');
+
+        horizSlider.value = horizWaves; horizValueSpan.textContent = horizWaves;
+        vertSlider.value = vertGain; vertValueSpan.textContent = vertGain.toFixed(1) + 'x';
+        protocolSel.value = '7';
+        fftYSlider.value = fftYMax; fftYValueSpan.textContent = fftYMax + '%';
+        modeSel.value = 'time';
+
+        function setStatus(key, type) {
+            currentStatusKey = key; currentStatusType = type || '';
+            statusBadge.textContent = t(key);
+            statusBadge.className = 'status-badge' + (currentStatusType ? ' ' + currentStatusType : '');
+        }
+
+        function getInt16LE(bytes, offset) {
+            const low = bytes[offset], high = bytes[offset+1];
+            let val = low | (high << 8);
+            if (val & 0x8000) val -= 0x10000;
+            return val;
+        }
+
+        function extractFrame(buf) {
+            const cfg = PROTOCOLS[currentProtocol];
+            const len = buf.length;
+            for (let i = 0; i <= len - cfg.frameLen; i++) {
+                if (buf[i] === 0xFE && buf[i+1] === 0xEF &&
+                    buf[i+2] === cfg.idBytes[0] && buf[i+3] === cfg.idBytes[1]) {
+                    const frame = buf.slice(i, i + cfg.frameLen);
+                    buf.splice(0, i + cfg.frameLen);
+                    return frame;
+                }
+            }
+            if (len > cfg.frameLen * 3) buf.splice(0, len - cfg.frameLen * 2);
+            return null;
+        }
+
+        function processFrame(frame, protocol) {
+            const cfg = PROTOCOLS[protocol];
+            if (!frame || frame.length !== cfg.frameLen) return;
+            if (frame[0] !== 0xFE || frame[1] !== 0xEF) return;
+            if (frame[2] !== cfg.idBytes[0] || frame[3] !== cfg.idBytes[1]) return;
+
+            const data = frame.slice(4);
+            const channels = cfg.channels;
+            const points = new Array(channels);
+            for (let ch = 0; ch < channels; ch++) points[ch] = new Float64Array(64);
+
+            if (channels === 3) {
+                for (let i = 0; i < 64; i++) {
+                    const base = i * 6;
+                    points[0][i] = getInt16LE(data, base);
+                    points[1][i] = getInt16LE(data, base+2);
+                    points[2][i] = getInt16LE(data, base+4);
+                }
+            } else {
+                for (let i = 0; i < 64; i++) {
+                    const base = i * 4;
+                    points[0][i] = getInt16LE(data, base);
+                    points[1][i] = getInt16LE(data, base+2);
+                }
+            }
+
+            if (waveWindows.length !== channels) {
+                waveWindows = new Array(channels);
+                for (let ch = 0; ch < channels; ch++) waveWindows[ch] = new Float64Array(MAX_WINDOW);
+                validDataLength = 0;
+                channelVisible = new Array(channels).fill(true);
+                updateChannelToggles();
+            }
+            const move = Math.min(64, MAX_WINDOW);
+            for (let ch = 0; ch < channels; ch++) {
+                const win = waveWindows[ch];
+                for (let i = 0; i < MAX_WINDOW - move; i++) win[i] = win[i + move];
+                for (let i = 0; i < move; i++) win[MAX_WINDOW - move + i] = points[ch][i];
+            }
+            validDataLength = Math.min(validDataLength + 64, MAX_WINDOW);
+            needsFFTUpdate = true;
+
+            if (rmsWindows.length !== channels) {
+                rmsWindows = new Array(channels);
+                for (let ch = 0; ch < channels; ch++) rmsWindows[ch] = new Float64Array(MAX_RMS_POINTS);
+                rmsDataLength = 0;
+            }
+            for (let ch = 0; ch < channels; ch++) {
+                let sumSq = 0;
+                const arr = points[ch];
+                for (let i = 0; i < 64; i++) sumSq += arr[i] * arr[i];
+                const rms = Math.sqrt(sumSq / 64);
+                const rmsWin = rmsWindows[ch];
+                for (let i = 0; i < MAX_RMS_POINTS - 1; i++) rmsWin[i] = rmsWin[i + 1];
+                rmsWin[MAX_RMS_POINTS - 1] = rms;
+            }
+            rmsDataLength = Math.min(rmsDataLength + 1, MAX_RMS_POINTS);
+        }
+
+        function processAllFrames() {
+            let frame;
+            while ((frame = extractFrame(rxBuffer))) processFrame(frame, currentProtocol);
+        }
+
+        // ---------- 绘图 ----------
+        function drawGridGeneric(cw, ch, margin, xDivs, yDivs, yMin, yMax, xMin, xMax, xUnit, yUnit) {
+            if (!showGrid) return;
+            const plotW = cw - margin.left - margin.right;
+            const plotH = ch - margin.top - margin.bottom;
+
+            ctx.strokeStyle = '#4a4a4a';
+            ctx.lineWidth = 0.8;
+            for (let i = 0; i <= xDivs; i++) {
+                const x = margin.left + (i / xDivs) * plotW;
+                ctx.beginPath(); ctx.moveTo(x, margin.top); ctx.lineTo(x, ch - margin.bottom); ctx.stroke();
+            }
+            for (let i = 0; i <= yDivs; i++) {
+                const y = margin.top + (i / yDivs) * plotH;
+                ctx.beginPath(); ctx.moveTo(margin.left, y); ctx.lineTo(cw - margin.right, y); ctx.stroke();
+            }
+
+            if (yMin <= 0 && yMax >= 0) {
+                const zeroY = margin.top + plotH - ((0 - yMin) / (yMax - yMin)) * plotH;
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2;
+                ctx.beginPath(); ctx.moveTo(margin.left, zeroY); ctx.lineTo(cw - margin.right, zeroY); ctx.stroke();
+            }
+
+            ctx.strokeStyle = '#555'; ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(margin.left, margin.top); ctx.lineTo(margin.left, ch - margin.bottom);
+            ctx.lineTo(cw - margin.right, ch - margin.bottom); ctx.stroke();
+
+            if (yUnit !== null && yUnit !== undefined) {
+                ctx.fillStyle = '#aaa'; ctx.font = '12px monospace'; ctx.textAlign = 'right';
+                for (let i = 0; i <= yDivs; i++) {
+                    const val = yMin + (yMax - yMin) * (i / yDivs);
+                    const y = margin.top + plotH - (i / yDivs) * plotH;
+                    const text = (Math.round(val * 10) / 10) + (yUnit ? ' ' + yUnit : '');
+                    ctx.fillText(text, margin.left - 8, y + 4);
+                }
+            }
+
+            if (xUnit !== undefined && xUnit !== null && xUnit !== '') {
+                ctx.textAlign = 'center'; ctx.font = '12px monospace';
+                for (let i = 0; i <= xDivs; i++) {
+                    const x = margin.left + (i / xDivs) * plotW;
+                    const val = xMin + (xMax - xMin) * (i / xDivs);
+                    ctx.fillText(xUnit ? val.toFixed(1) + xUnit : Math.round(val).toString(), x, ch - margin.bottom + 18);
+                }
+            }
+        }
+
+        function drawTimeDomain() {
+            if (!canvas || waveWindows.length === 0) return;
+            const cw = canvas.width = canvas.clientWidth * window.devicePixelRatio;
+            const ch = canvas.height = canvas.clientHeight * window.devicePixelRatio;
+            ctx.setTransform(1,0,0,1,0,0);
+            const margin = { top: 30, bottom: 30, left: 45, right: 25 };
+            ctx.clearRect(0,0,cw,ch);
+
+            if (validDataLength < 2) return;
+            const displayPoints = Math.min(horizWaves * 64, validDataLength);
+            if (displayPoints < 2) return;
+
+            const rawMin = -32768, rawMax = 32767;
+            const yHalfRange = ((rawMax - rawMin) / 2) / vertGain;
+            const yMaxVal = yHalfRange, yMinVal = -yHalfRange;
+            drawGridGeneric(cw, ch, margin, 10, 8, yMinVal, yMaxVal, 0, displayPoints, '', '');
+
+            const scaleX = (cw - margin.left - margin.right) / (displayPoints - 1);
+            const startIdx = MAX_WINDOW - displayPoints;
+            const zeroY = margin.top + (ch - margin.top - margin.bottom) - ((0 - yMinVal) / (yMaxVal - yMinVal)) * (ch - margin.top - margin.bottom);
+
+            const channelNames = currentProtocol === 7 ? ['UA','UB','UC'] : currentProtocol === 8 ? ['IA','IB','IC'] : currentProtocol === 9 ? ['UA','IA'] : currentProtocol === 10 ? ['UB','IB'] : ['UC','IC'];
+            for (let c = 0; c < waveWindows.length; c++) {
+                if (!channelVisible[c]) continue;
+                const data = waveWindows[c];
+                ctx.strokeStyle = getChannelColor(c, channelNames);
+                ctx.lineWidth = 1.8; ctx.beginPath();
+                for (let i = 0; i < displayPoints; i++) {
+                    const x = margin.left + i * scaleX;
+                    const val = data[startIdx + i];
+                    const y = zeroY - (val / yMaxVal) * ((ch - margin.top - margin.bottom) / 2);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
+            if (hoverPointIndex >= 0 && displayMode === 'time') {
+                ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(hoverCanvasX, margin.top); ctx.lineTo(hoverCanvasX, ch - margin.bottom); ctx.stroke();
+            }
+        }
+
+        function computeHarmonics(channelData) {
+            const N = MAX_WINDOW;
+            const harmonics = [];
+            for (let h = 1; h <= 32; h++) {
+                let real = 0, imag = 0;
+                const omega = 2 * Math.PI * h / 64;
+                for (let n = 0; n < N; n++) {
+                    const angle = omega * n, val = channelData[n];
+                    real += val * Math.cos(angle);
+                    imag -= val * Math.sin(angle);
+                }
+                harmonics.push(Math.sqrt(real*real + imag*imag) / (N/2));
+            }
+            return harmonics;
+        }
+
+        function updateFFT() {
+            if (!needsFFTUpdate || validDataLength < MAX_WINDOW) return;
+            const channels = waveWindows.length;
+            if (channels === 0) return;
+            const allHarmonics = [], thdArr = [];
+            for (let ch = 0; ch < channels; ch++) {
+                const harmonics = computeHarmonics(waveWindows[ch]);
+                allHarmonics.push(harmonics);
+                let sumSq = 0;
+                for (let h = 1; h < harmonics.length; h++) sumSq += harmonics[h] * harmonics[h];
+                const thd = harmonics[0] !== 0 ? (Math.sqrt(sumSq) / harmonics[0]) * 100 : 0;
+                thdArr.push(thd);
+            }
+            fftCache = { amplitudes: allHarmonics, thd: thdArr };
+            needsFFTUpdate = false;
+        }
+
+        function drawFrequencyDomain() {
+            if (!canvas) return;
+            const cw = canvas.width = canvas.clientWidth * window.devicePixelRatio;
+            const ch = canvas.height = canvas.clientHeight * window.devicePixelRatio;
+            ctx.setTransform(1,0,0,1,0,0);
+            const margin = { top: 30, bottom: 45, left: 55, right: 25 };
+            ctx.clearRect(0,0,cw,ch);
+
+            if (validDataLength < MAX_WINDOW) {
+                ctx.fillStyle = '#ff6666'; ctx.font = '16px sans-serif';
+                ctx.fillText(t('fft.needData'), margin.left+20, margin.top+30);
+                ctx.fillText(t('fft.progress', [validDataLength]), margin.left+20, margin.top+55);
+                fftBarPositions = []; return;
+            }
+            updateFFT();
+            if (!fftCache) return;
+
+            const channels = fftCache.amplitudes.length;
+            const maxHarmonic = 32, startHarmonic = 2, numHarmonics = maxHarmonic - startHarmonic + 1;
+            const plotW = cw - margin.left - margin.right, plotH = ch - margin.top - margin.bottom;
+            const groupGap = 4, totalGap = groupGap * (numHarmonics - 1);
+            const usableWidth = plotW - totalGap, barGroupWidth = usableWidth / numHarmonics;
+            const barWidth = Math.max(1, barGroupWidth * 0.85 / channels);
+            const barOffset = (barGroupWidth - barWidth * channels) / 2;
+            const maxPercent = fftYMax;
+            const channelNames = currentProtocol === 7 ? ['UA','UB','UC'] : currentProtocol === 8 ? ['IA','IB','IC'] : currentProtocol === 9 ? ['UA','IA'] : currentProtocol === 10 ? ['UB','IB'] : ['UC','IC'];
+
+            if (showGrid) {
+                ctx.strokeStyle = '#4a4a4a'; ctx.lineWidth = 0.8;
+                const stepY = fftYMax <= 20 ? 2 : (fftYMax <= 50 ? 5 : 10);
+                for (let p = 0; p <= maxPercent; p += stepY) {
+                    const y = margin.top + plotH - (p / maxPercent) * plotH;
+                    ctx.beginPath(); ctx.moveTo(margin.left, y); ctx.lineTo(cw - margin.right, y); ctx.stroke();
+                }
+                for (let harmonic = 2; harmonic <= 32; harmonic += 2) {
+                    const idx = harmonic - 2;
+                    const xGroup = margin.left + idx * (plotW / 31);
+                    ctx.beginPath(); ctx.moveTo(xGroup, margin.top); ctx.lineTo(xGroup, ch - margin.bottom); ctx.stroke();
+                }
+                ctx.strokeStyle = '#555'; ctx.beginPath();
+                ctx.moveTo(margin.left, margin.top); ctx.lineTo(margin.left, ch - margin.bottom);
+                ctx.lineTo(cw - margin.right, ch - margin.bottom); ctx.stroke();
+            }
+
+            const positions = [];
+            for (let harmonic = startHarmonic; harmonic <= maxHarmonic; harmonic++) {
+                const idx = harmonic - startHarmonic;
+                const xGroup = margin.left + idx * (barGroupWidth + groupGap);
+                for (let c = 0; c < channels; c++) {
+                    if (!channelVisible[c]) continue;
+                    const amp = fftCache.amplitudes[c][harmonic-1];
+                    const base = fftCache.amplitudes[c][0];
+                    const percent = base !== 0 ? (amp / base) * 100 : 0;
+                    const barHeight = (percent / maxPercent) * plotH;
+                    const yTop = margin.top + plotH - barHeight;
+                    const xLeft = xGroup + barOffset + c * barWidth;
+                    ctx.fillStyle = getChannelColor(c, channelNames);
+                    ctx.fillRect(xLeft, yTop, barWidth, barHeight);
+                    positions.push({ x: xLeft, y: yTop, w: barWidth, h: barHeight, harmonic, channel: c, name: channelNames[c], percent });
+                }
+            }
+
+            ctx.fillStyle = '#aaa'; ctx.font = '14px monospace'; ctx.textAlign = 'right';
+            const stepY = fftYMax <= 20 ? 2 : (fftYMax <= 50 ? 5 : 10);
+            for (let p = 0; p <= maxPercent; p += stepY) {
+                const y = margin.top + plotH - (p / maxPercent) * plotH;
+                ctx.fillText(p + '%', margin.left - 5, y + 5);
+            }
+
+            ctx.textAlign = 'center';
+            for (let harmonic = startHarmonic; harmonic <= maxHarmonic; harmonic++) {
+                const idx = harmonic - startHarmonic;
+                const xGroup = margin.left + idx * (barGroupWidth + groupGap);
+                const groupCenterX = xGroup + barGroupWidth / 2;
+                const labelY = ch - margin.bottom + 16;
+                ctx.fillStyle = (harmonic % 5 === 0 || harmonic === startHarmonic || harmonic === maxHarmonic) ? '#ddd' : '#aaa';
+                ctx.font = (harmonic % 5 === 0) ? '14px monospace' : '13px monospace';
+                ctx.fillText(harmonic, groupCenterX, labelY);
+            }
+
+            const targetHarmonic = 27;
+            const targetIdx = targetHarmonic - startHarmonic;
+            const targetXGroup = margin.left + targetIdx * (barGroupWidth + groupGap);
+            const targetCenterX = targetXGroup + barGroupWidth / 2;
+
+            ctx.textAlign = 'left'; ctx.font = '18px sans-serif';
+            let lineY = margin.top + 55;
+            for (let c = 0; c < channels; c++) {
+                if (!channelVisible[c]) continue;
+                ctx.fillStyle = getChannelColor(c, channelNames);
+                ctx.fillText(`${channelNames[c]} ${t('fft.thd')}: ${fftCache.thd[c].toFixed(2)}%`, targetCenterX, lineY);
+                lineY += 25;
+            }
+
+            fftBarPositions = positions;
+        }
+
+        function drawRMSDomain() {
+            if (!canvas || rmsWindows.length === 0) return;
+            const cw = canvas.width = canvas.clientWidth * window.devicePixelRatio;
+            const ch = canvas.height = canvas.clientHeight * window.devicePixelRatio;
+            ctx.setTransform(1,0,0,1,0,0);
+            const margin = { top: 30, bottom: 30, left: 45, right: 25 };
+            ctx.clearRect(0,0,cw,ch);
+
+            if (rmsDataLength < 1) {
+                ctx.fillStyle = '#ff6666'; ctx.font = '16px sans-serif';
+                ctx.fillText(t('rms.needData'), margin.left + 20, margin.top + 30);
+                return;
+            }
+
+            const pixelsPerPoint = horizWaves;
+            const plotW = cw - margin.left - margin.right;
+            const maxDisplayPoints = Math.floor(plotW / pixelsPerPoint);
+            const displayPoints = Math.min(maxDisplayPoints, rmsDataLength);
+            if (displayPoints < 1) return;
+
+            const channelNames = currentProtocol === 7 ? ['UA','UB','UC'] :
+                                 currentProtocol === 8 ? ['IA','IB','IC'] :
+                                 currentProtocol === 9 ? ['UA','IA'] :
+                                 currentProtocol === 10 ? ['UB','IB'] : ['UC','IC'];
+
+            let baseRange = 300;
+            for (let c = 0; c < channelNames.length; c++) {
+                if (channelNames[c].startsWith('I')) { baseRange = 10; break; }
+            }
+
+            const physicalWindows = [];
+            for (let c = 0; c < rmsWindows.length; c++) {
+                const { coeff } = getChannelUnitAndPrecision(channelNames[c]);
+                const rawData = rmsWindows[c];
+                const converted = new Float64Array(MAX_RMS_POINTS);
+                for (let i = 0; i < MAX_RMS_POINTS; i++) {
+                    converted[i] = rawData[i] * coeff;
+                }
+                physicalWindows.push(converted);
+            }
+
+            drawGridGeneric(cw, ch, margin, 10, 8, 0, baseRange, 0, displayPoints * pixelsPerPoint, null, null);
+
+            const scaleX = pixelsPerPoint;
+            const startIdx = MAX_RMS_POINTS - displayPoints;
+            const plotH = ch - margin.top - margin.bottom;
+            for (let c = 0; c < physicalWindows.length; c++) {
+                if (!channelVisible[c]) continue;
+                const data = physicalWindows[c];
+                ctx.strokeStyle = getChannelColor(c, channelNames);
+                ctx.lineWidth = 1.8; ctx.beginPath();
+                for (let i = 0; i < displayPoints; i++) {
+                    const x = margin.left + i * scaleX;
+                    const val = data[startIdx + i] * vertGain;
+                    let y = margin.top + plotH - (val / baseRange) * plotH;
+                    y += rmsVerticalOffset;
+                    y = Math.max(-1000, Math.min(ch + 1000, y));
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
+            if (hoverPointIndex >= 0 && displayMode === 'rms') {
+                ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(hoverCanvasX, margin.top); ctx.lineTo(hoverCanvasX, ch - margin.bottom); ctx.stroke();
+            }
+
+            ctx.fillStyle = '#888'; ctx.font = '12px monospace'; ctx.textAlign = 'right';
+            ctx.fillText(`Gain: ${vertGain.toFixed(1)}x  Offset: ${rmsVerticalOffset}px`, cw - margin.right - 10, margin.top + 15);
+
+            const basePeriod = 1000 / baseFreq;
+            const timePerPixel = basePeriod / pixelsPerPoint;
+            const totalSeconds = displayPoints * pixelsPerPoint * timePerPixel / 1000;
+            let stepSeconds = 1;
+            if (totalSeconds > 10) stepSeconds = 2;
+            if (totalSeconds > 30) stepSeconds = 5;
+            if (totalSeconds > 60) stepSeconds = 10;
+
+            ctx.fillStyle = '#aaa'; ctx.font = '12px monospace'; ctx.textAlign = 'center';
+            const xDivs = 10;
+            for (let i = 0; i <= xDivs; i++) {
+                const x = margin.left + (i / xDivs) * plotW;
+                const timeSec = (i * displayPoints * pixelsPerPoint / xDivs) * timePerPixel / 1000;
+                if (Math.abs(timeSec % stepSeconds) < 0.001 || i === 0 || i === xDivs) {
+                    ctx.fillText(timeSec.toFixed(1) + t('rms.seconds'), x, ch - margin.bottom + 18);
+                }
+            }
+        }
+
+        function drawPauseOverlay() {
+            if (!paused) return;
+            pauseFlashCount++;
+            const showText = (pauseFlashCount % 60 < 30);
+            if (showText) {
+                const cw = canvas.width;
+                const ch = canvas.height;
+                ctx.save();
+                ctx.font = 'bold 36px sans-serif';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(t('status.paused'), cw/2, ch/2);
+                ctx.restore();
+            }
+        }
+
+        function drawDisplay() {
+            if (displayMode === 'time') drawTimeDomain();
+            else if (displayMode === 'fft') drawFrequencyDomain();
+            else if (displayMode === 'rms') drawRMSDomain();
+            drawPauseOverlay();
+        }
+
+        function autoFitRMS() {
+            if (displayMode !== 'rms' || rmsWindows.length === 0 || rmsDataLength < 1) return;
+            const margin = { top: 30, bottom: 30, left: 45, right: 25 };
+            const plotW = canvas.width - margin.left - margin.right;
+            const plotH = canvas.height - margin.top - margin.bottom;
+            const pixelsPerPoint = horizWaves;
+            const maxDisplayPoints = Math.floor(plotW / pixelsPerPoint);
+            const displayPoints = Math.min(maxDisplayPoints, rmsDataLength);
+            if (displayPoints < 1) return;
+
+            const channelNames = currentProtocol === 7 ? ['UA','UB','UC'] :
+                                 currentProtocol === 8 ? ['IA','IB','IC'] :
+                                 currentProtocol === 9 ? ['UA','IA'] :
+                                 currentProtocol === 10 ? ['UB','IB'] : ['UC','IC'];
+            let baseRange = 300;
+            for (let c = 0; c < channelNames.length; c++) {
+                if (channelNames[c].startsWith('I')) { baseRange = 10; break; }
+            }
+
+            const startIdx = MAX_RMS_POINTS - displayPoints;
+            let minVal = Infinity, maxVal = -Infinity;
+            for (let c = 0; c < rmsWindows.length; c++) {
+                if (!channelVisible[c]) continue;
+                const { coeff } = getChannelUnitAndPrecision(channelNames[c]);
+                const rawData = rmsWindows[c];
+                for (let i = 0; i < displayPoints; i++) {
+                    const val = rawData[startIdx + i] * coeff;
+                    if (val < minVal) minVal = val;
+                    if (val > maxVal) maxVal = val;
+                }
+            }
+
+            if (minVal === Infinity) return;
+            const range = maxVal - minVal;
+            if (range <= 0) {
+                vertGain = 4;
+                rmsVerticalOffset = 0;
+            } else {
+                const targetHeight = plotH * 0.8;
+                vertGain = Math.min(20, (targetHeight / plotH) * baseRange / range);
+                if (vertGain < 0.5) vertGain = 0.5;
+                const avg = (minVal + maxVal) / 2;
+                const desiredY = margin.top + plotH / 2;
+                const currentY = margin.top + plotH - (avg * vertGain / baseRange) * plotH;
+                rmsVerticalOffset = desiredY - currentY;
+            }
+
+            vertSlider.value = vertGain;
+            vertValueSpan.textContent = vertGain.toFixed(1) + 'x';
+        }
+
+        function onWheel(e) {
+            if (displayMode !== 'rms') return;
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.5 : 0.5;
+            vertGain = Math.min(20, Math.max(0.5, vertGain + delta));
+            vertSlider.value = vertGain;
+            vertValueSpan.textContent = vertGain.toFixed(1) + 'x';
+        }
+
+        function onMouseDown(e) {
+            if (displayMode !== 'rms') return;
+            if (e.button !== 0) return;
+            isDragging = true;
+            dragStartY = e.clientY;
+            dragStartOffset = rmsVerticalOffset;
+            e.preventDefault();
+        }
+
+        function onMouseMoveDrag(e) {
+            if (!isDragging) return;
+            const deltaY = e.clientY - dragStartY;
+            rmsVerticalOffset = dragStartOffset + deltaY;
+            e.preventDefault();
+        }
+
+        function onMouseUp(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            e.preventDefault();
+        }
+
+        canvas.addEventListener('wheel', onWheel);
+        canvas.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('mousemove', onMouseMoveDrag);
+        document.addEventListener('mouseup', onMouseUp);
+        canvas.addEventListener('dragstart', e => e.preventDefault());
+
+        function updateTooltipIfNeeded() {
+            if (paused || displayMode === 'fft' || !mouseInsideCanvas || activeMode !== 'running') {
+                return;
+            }
+            const margin = { top: 30, bottom: 30, left: 45, right: 25 };
+            const plotW = canvas.width - margin.left - margin.right;
+
+            if (displayMode === 'time') {
+                if (waveWindows.length === 0 || validDataLength < 2) return;
+                const displayPoints = Math.min(horizWaves * 64, validDataLength);
+                if (displayPoints < 2) return;
+                const scaleX = plotW / (displayPoints - 1);
+                if (lastMouseX < margin.left || lastMouseX > canvas.width - margin.right) return;
+                const pointFloat = (lastMouseX - margin.left) / scaleX;
+                const pointIndex = Math.round(pointFloat);
+                if (pointIndex < 0 || pointIndex >= displayPoints) return;
+                hoverPointIndex = pointIndex;
+                hoverCanvasX = margin.left + pointIndex * scaleX;
+
+                const channelNames = currentProtocol === 7 ? ['UA','UB','UC'] : currentProtocol === 8 ? ['IA','IB','IC'] : currentProtocol === 9 ? ['UA','IA'] : currentProtocol === 10 ? ['UB','IB'] : ['UC','IC'];
+                const startIdx = MAX_WINDOW - displayPoints;
+                let lines = [];
+                for (let c = 0; c < waveWindows.length; c++) {
+                    if (!channelVisible[c]) continue;
+                    const val = waveWindows[c][startIdx + pointIndex];
+                    lines.push(`${channelNames[c]}: ${Math.round(val)}`);
+                }
+                if (lines.length > 0) {
+                    tooltip.style.display = 'block';
+                    tooltip.innerHTML = t('timeDomainTooltip', { point: pointIndex, value: '' }) + '<br>' + lines.join('<br>');
+                    const rect = canvas.getBoundingClientRect();
+                    tooltip.style.left = (lastMouseX / (canvas.width / rect.width) - rect.left + 15) + 'px';
+                    tooltip.style.top = (lastMouseY / (canvas.height / rect.height) - rect.top - 25) + 'px';
+                }
+            } else if (displayMode === 'rms') {
+                if (rmsWindows.length === 0 || rmsDataLength < 1) return;
+                const pixelsPerPoint = horizWaves;
+                const maxDisplayPoints = Math.floor(plotW / pixelsPerPoint);
+                const displayPoints = Math.min(maxDisplayPoints, rmsDataLength);
+                if (displayPoints < 1) return;
+                const scaleX = pixelsPerPoint;
+                if (lastMouseX < margin.left || lastMouseX > canvas.width - margin.right) return;
+                const pointIndex = Math.floor((lastMouseX - margin.left) / scaleX);
+                if (pointIndex < 0 || pointIndex >= displayPoints) return;
+                hoverPointIndex = pointIndex;
+                hoverCanvasX = margin.left + pointIndex * scaleX;
+
+                const channelNames = currentProtocol === 7 ? ['UA','UB','UC'] : currentProtocol === 8 ? ['IA','IB','IC'] : currentProtocol === 9 ? ['UA','IA'] : currentProtocol === 10 ? ['UB','IB'] : ['UC','IC'];
+                const startIdx = MAX_RMS_POINTS - displayPoints;
+                let lines = [];
+                for (let c = 0; c < rmsWindows.length; c++) {
+                    if (!channelVisible[c]) continue;
+                    const { coeff, unit, precision } = getChannelUnitAndPrecision(channelNames[c]);
+                    const rawVal = rmsWindows[c][startIdx + pointIndex];
+                    const physicalVal = rawVal * coeff;
+                    lines.push(`${channelNames[c]}: ${physicalVal.toFixed(precision)} ${unit}`);
+                }
+                if (lines.length > 0) {
+                    tooltip.style.display = 'block';
+                    tooltip.innerHTML = `Period: ${pointIndex} | ${t('rms.value')}<br>` + lines.join('<br>');
+                    const rect = canvas.getBoundingClientRect();
+                    tooltip.style.left = (lastMouseX / (canvas.width / rect.width) - rect.left + 15) + 'px';
+                    tooltip.style.top = (lastMouseY / (canvas.height / rect.height) - rect.top - 25) + 'px';
+                }
+            }
+        }
+
+        function handleMouseMove(e) {
+            if (!canvas) return;
+            const rect = canvas.getBoundingClientRect();
+            lastMouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            lastMouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+            mouseInsideCanvas = true;
+
+            if (displayMode === 'fft') {
+                if (!fftBarPositions.length) { tooltip.style.display = 'none'; return; }
+                let hit = null;
+                for (const bar of fftBarPositions) {
+                    if (lastMouseX >= bar.x && lastMouseX <= bar.x + bar.w && lastMouseY >= bar.y && lastMouseY <= bar.y + bar.h) {
+                        hit = bar; break;
+                    }
+                }
+                if (hit) {
+                    tooltip.style.display = 'block';
+                    tooltip.textContent = `${hit.name} | ${t('fft.harmonic')} ${hit.harmonic}: ${hit.percent.toFixed(2)}%`;
+                    tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+                    tooltip.style.top = (e.clientY - rect.top - 25) + 'px';
+                } else {
+                    tooltip.style.display = 'none';
+                }
+                hoverPointIndex = -1;
+            } else {
+                const margin = { top: 30, bottom: 30, left: 45, right: 25 };
+                const plotW = canvas.width - margin.left - margin.right;
+
+                if (displayMode === 'time') {
+                    if (waveWindows.length === 0 || validDataLength < 2) return;
+                    const displayPoints = Math.min(horizWaves * 64, validDataLength);
+                    if (displayPoints < 2) return;
+                    const scaleX = plotW / (displayPoints - 1);
+                    if (lastMouseX < margin.left || lastMouseX > canvas.width - margin.right) {
+                        tooltip.style.display = 'none'; hoverPointIndex = -1; return;
+                    }
+                    const pointFloat = (lastMouseX - margin.left) / scaleX;
+                    const pointIndex = Math.round(pointFloat);
+                    if (pointIndex < 0 || pointIndex >= displayPoints) {
+                        tooltip.style.display = 'none'; hoverPointIndex = -1; return;
+                    }
+                    hoverPointIndex = pointIndex;
+                    hoverCanvasX = margin.left + pointIndex * scaleX;
+
+                    const channelNames = currentProtocol === 7 ? ['UA','UB','UC'] : currentProtocol === 8 ? ['IA','IB','IC'] : currentProtocol === 9 ? ['UA','IA'] : currentProtocol === 10 ? ['UB','IB'] : ['UC','IC'];
+                    const startIdx = MAX_WINDOW - displayPoints;
+                    let lines = [];
+                    for (let c = 0; c < waveWindows.length; c++) {
+                        if (!channelVisible[c]) continue;
+                        const val = waveWindows[c][startIdx + pointIndex];
+                        lines.push(`${channelNames[c]}: ${Math.round(val)}`);
+                    }
+                    if (lines.length > 0) {
+                        tooltip.style.display = 'block';
+                        tooltip.innerHTML = t('timeDomainTooltip', { point: pointIndex, value: '' }) + '<br>' + lines.join('<br>');
+                        tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+                        tooltip.style.top = (e.clientY - rect.top - 25) + 'px';
+                    }
+                } else if (displayMode === 'rms') {
+                    if (rmsWindows.length === 0 || rmsDataLength < 1) return;
+                    const pixelsPerPoint = horizWaves;
+                    const maxDisplayPoints = Math.floor(plotW / pixelsPerPoint);
+                    const displayPoints = Math.min(maxDisplayPoints, rmsDataLength);
+                    if (displayPoints < 1) return;
+                    const scaleX = pixelsPerPoint;
+                    if (lastMouseX < margin.left || lastMouseX > canvas.width - margin.right) {
+                        tooltip.style.display = 'none'; hoverPointIndex = -1; return;
+                    }
+                    const pointIndex = Math.floor((lastMouseX - margin.left) / scaleX);
+                    if (pointIndex < 0 || pointIndex >= displayPoints) {
+                        tooltip.style.display = 'none'; hoverPointIndex = -1; return;
+                    }
+                    hoverPointIndex = pointIndex;
+                    hoverCanvasX = margin.left + pointIndex * scaleX;
+
+                    const channelNames = currentProtocol === 7 ? ['UA','UB','UC'] : currentProtocol === 8 ? ['IA','IB','IC'] : currentProtocol === 9 ? ['UA','IA'] : currentProtocol === 10 ? ['UB','IB'] : ['UC','IC'];
+                    const startIdx = MAX_RMS_POINTS - displayPoints;
+                    let lines = [];
+                    for (let c = 0; c < rmsWindows.length; c++) {
+                        if (!channelVisible[c]) continue;
+                        const { coeff, unit, precision } = getChannelUnitAndPrecision(channelNames[c]);
+                        const rawVal = rmsWindows[c][startIdx + pointIndex];
+                        const physicalVal = rawVal * coeff;
+                        lines.push(`${channelNames[c]}: ${physicalVal.toFixed(precision)} ${unit}`);
+                    }
+                    if (lines.length > 0) {
+                        tooltip.style.display = 'block';
+                        tooltip.innerHTML = `Period: ${pointIndex} | ${t('rms.value')}<br>` + lines.join('<br>');
+                        tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+                        tooltip.style.top = (e.clientY - rect.top - 25) + 'px';
+                    }
+                }
+            }
+        }
+
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+            hoverPointIndex = -1;
+            mouseInsideCanvas = false;
+            isDragging = false;
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.code === 'Space') {
+                e.preventDefault();
+                if (activeMode === 'running') {
+                    paused = !paused;
+                    if (paused) {
+                        setStatus('status.paused', 'paused');
+                    } else {
+                        setStatus('status.running', 'running');
+                        pauseFlashCount = 0;
+                    }
+                }
+            }
+            if (displayMode === 'fft') return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                vertGain = Math.min(20, vertGain + 0.5);
+                vertSlider.value = vertGain;
+                vertValueSpan.textContent = vertGain.toFixed(1) + 'x';
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                vertGain = Math.max(0.5, vertGain - 0.5);
+                vertSlider.value = vertGain;
+                vertValueSpan.textContent = vertGain.toFixed(1) + 'x';
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                horizWaves = Math.max(1, horizWaves - 1);
+                horizSlider.value = horizWaves;
+                horizValueSpan.textContent = horizWaves;
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                horizWaves = Math.min(20, horizWaves + 1);
+                horizSlider.value = horizWaves;
+                horizValueSpan.textContent = horizWaves;
+            }
+        });
+
+        btnAutoFit.addEventListener('click', () => {
+            if (displayMode === 'rms') autoFitRMS();
+        });
+
+        function updateChannelToggles() {
+            const channels = waveWindows.length || rmsWindows.length;
+            const names = currentProtocol === 7 ? ['UA','UB','UC'] : currentProtocol === 8 ? ['IA','IB','IC'] : currentProtocol === 9 ? ['UA','IA'] : currentProtocol === 10 ? ['UB','IB'] : ['UC','IC'];
+            chTogglesDiv.innerHTML = '';
+            for (let c = 0; c < channels; c++) {
+                const checked = channelVisible[c] ? 'checked' : '';
+                chTogglesDiv.innerHTML += `<input type="checkbox" id="ch${c}" ${checked} data-ch="${c}">
+                    <label for="ch${c}" style="color:${getChannelColor(c, names)}">${names[c]}</label>`;
+            }
+            document.querySelectorAll('#chToggles input').forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    channelVisible[parseInt(e.target.dataset.ch)] = e.target.checked;
+                    needsFFTUpdate = true;
+                });
+            });
+        }
+
+        async function unifiedReadLoop() {
+            while (activeMode !== 'idle' && port && port.readable) {
+                try {
+                    reader = port.readable.getReader();
+                    while (activeMode !== 'idle') {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        if (value && value.length > 0) {
+                            if (activeMode === 'running') {
+                                if (!paused) {
+                                    rxBuffer.push(...value);
+                                    processAllFrames();
+                                    if (rxBuffer.length > MAX_BUFFER_SIZE) rxBuffer.splice(0, rxBuffer.length - MAX_BUFFER_SIZE);
+                                    setStatus('status.running', 'running');
+                                } else {
+                                    rxBuffer.length = 0;
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    if (err.name === 'AbortError' || err.name === 'InvalidStateError') break;
+                    console.warn('Read error:', err.message);
+                    setStatus('status.syncing', 'error');
+                    await new Promise(r => setTimeout(r, 200));
+                } finally {
+                    if (reader) { try { reader.releaseLock(); } catch(e) {} reader = null; }
+                }
+            }
+        }
+
+        function startLoop() { if (abortController) stopLoop(); abortController = new AbortController(); unifiedReadLoop(); }
+        function stopLoop() { if (abortController) { abortController.abort(); abortController = null; } }
+
+        async function switchToIdle() {
+            activeMode = 'idle'; stopLoop();
+            for (let i = 0; i < 50 && reader; i++) await new Promise(r => setTimeout(r, 10));
+            if (port) { try { await port.close(); } catch(e) {} port = null; }
+            btnConnect.disabled = false; btnDisconnect.disabled = true; btnStart.disabled = true; btnStop.disabled = true;
+            btnAutoFit.disabled = true;
+            paused = false; pauseFlashCount = 0;
+            setStatus('status.disconnected');
+            rxBuffer = []; waveWindows = []; validDataLength = 0; rmsWindows = []; rmsDataLength = 0;
+            channelVisible = []; fftCache = null; needsFFTUpdate = false;
+            rmsVerticalOffset = 0;
+        }
+
+        function switchToDraining() {
+            if (activeMode === 'draining') return;
+            stopLoop(); activeMode = 'draining'; rxBuffer = [];
+            setStatus('status.idle', 'idle'); startLoop();
+        }
+
+        function switchToRunning() {
+            if (activeMode === 'running') return;
+            stopLoop(); activeMode = 'running';
+            rxBuffer = []; waveWindows = []; validDataLength = 0; rmsWindows = []; rmsDataLength = 0;
+            channelVisible = []; fftCache = null; needsFFTUpdate = false;
+            paused = false; pauseFlashCount = 0;
+            rmsVerticalOffset = 0;
+            setStatus('status.syncing', 'running'); startLoop();
+        }
+
+        function updateDisplayMode(mode) {
+            displayMode = mode;
+            if (mode === 'fft') {
+                horizSlider.disabled = true; vertSlider.disabled = true; fftYSlider.disabled = false;
+                btnAutoFit.disabled = true;
+                needsFFTUpdate = true;
+            } else {
+                horizSlider.disabled = false; vertSlider.disabled = false; fftYSlider.disabled = true;
+                btnAutoFit.disabled = (mode !== 'rms');
+                if (mode === 'rms') {
+                    horizWaves = 1;
+                } else if (mode === 'time') {
+                    horizWaves = 2;
+                }
+                horizSlider.value = horizWaves;
+                horizValueSpan.textContent = horizWaves;
+            }
+            tooltip.style.display = 'none'; hoverPointIndex = -1;
+        }
+
+        btnConnect.onclick = async () => {
+            if (port) await switchToIdle();
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 256000 });
+                btnConnect.disabled = true; btnDisconnect.disabled = false; btnStart.disabled = false;
+                switchToDraining();
+                setStatus('status.connected', 'connected');
+            } catch (err) {
+                setStatus('status.error', 'error'); port = null; activeMode = 'idle';
+                btnConnect.disabled = false; btnDisconnect.disabled = true;
+            }
+        };
+        btnDisconnect.onclick = () => switchToIdle();
+        btnStart.onclick = () => {
+            currentProtocol = parseInt(protocolSel.value);
+            if (!port) { setStatus('status.error', 'error'); return; }
+            btnStart.disabled = true; btnStop.disabled = false;
+            switchToRunning();
+        };
+        btnStop.onclick = () => { btnStart.disabled = false; btnStop.disabled = true; switchToDraining(); };
+
+        horizSlider.oninput = () => { if (!horizSlider.disabled) { horizWaves = parseInt(horizSlider.value); horizValueSpan.textContent = horizWaves; } };
+        vertSlider.oninput = () => { if (!vertSlider.disabled) { vertGain = parseFloat(vertSlider.value); vertValueSpan.textContent = vertGain.toFixed(1) + 'x'; } };
+        gridSwitch.onchange = () => { showGrid = gridSwitch.checked; };
+        modeSel.onchange = () => updateDisplayMode(modeSel.value);
+        fftYSlider.oninput = () => { if (!fftYSlider.disabled) { fftYMax = parseInt(fftYSlider.value); fftYValueSpan.textContent = fftYMax + '%'; } };
+        langSel.onchange = () => { currentLang = langSel.value; updateUILanguage(); };
+
+        function animationLoop() {
+            if (activeMode === 'running' || activeMode === 'draining') {
+                drawDisplay();
+                updateTooltipIfNeeded();
+            }
+            requestAnimationFrame(animationLoop);
+        }
+        requestAnimationFrame(animationLoop);
+
+        window.onresize = () => { if (canvas) drawDisplay(); };
+        window.onbeforeunload = async () => { if (port) { try { await port.close(); } catch(e) {} } };
+
+        updateDisplayMode('time');
+        updateUILanguage();
+        setStatus('status.disconnected');
+        btnDisconnect.disabled = true; btnStop.disabled = true;
+    })();
+</script>
+</body>
+</html>
